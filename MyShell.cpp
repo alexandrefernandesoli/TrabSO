@@ -10,6 +10,8 @@
 #include <regex>
 #include <ctime>
 #include <sys/wait.h>
+#include "Utils.h"
+#include "BuiltIns.h"
 // #include <sys/stat.h>
 // #include <sys/types.h>
 
@@ -28,9 +30,6 @@ void handle_sigint();
 void handle_ctrd(char *entry);
 void write_history(string command);
 void execute_command(string command);
-void set_command();
-void echo_command();
-void cd_command();
 void check_builtins();
 void run_external();
 // string read_line(char *prompt);
@@ -42,8 +41,8 @@ int cmd_counter = 0;
 string command_string = "";
 string prompt = "tecii$ ";
 struct utsname uname_data;
-extern char **environ;
 vector<string> args;
+map<int, pair<int, string>> job_list;
 
 void initialize()
 {
@@ -145,27 +144,6 @@ void write_history(string command)
   }
 }
 
-void show_history()
-{
-  //Function to print the history
-  // printf("in history");
-  ifstream in("history.txt");
-  int n = 1;
-
-  string s;
-  if (in.is_open())
-  {
-    while (!in.eof())
-    {
-      getline(in, s);
-      cout << n << ". " << s << "\n";
-      n++;
-    }
-
-    in.close();
-  }
-}
-
 string parse_command(char text[])
 {
   regex space_remove_regex("^\\s+|\\s+$"); // remove leading and trailing spaces
@@ -186,68 +164,95 @@ void split_args(string input)
   args.clear();
   command_string = "";
 
-  std::stringstream ss(input);
-  State state = WORD;
-  string arg;
-  while (ss.peek() != EOF)
+  if (input.find('|') != string::npos)
   {
-    char c = ss.get();
+    cout << "\ntem pipe\n";
+    string tmp;
+    stringstream string_stream(input);
+    vector<string> commands;
 
-    switch (state)
+    while (getline(string_stream, tmp, '|'))
     {
-    case OUTSIDE:
-      // move to next, dont add to word
-      if (ss.peek() == '"')
-      {
-        state = QUOTE;
-        args.push_back(arg);
-        arg.clear();
-      }
-      else if (ss.peek() != ' ')
-      {
-        state = WORD;
-        args.push_back(arg);
-        arg.clear();
-      }
-      break;
+      commands.push_back(tmp);
+    }
 
-    case WORD:
-      // move to next & add unless a space
-      if (c == '\\')
-      {
-        c = ss.get();
-      }
-      if (ss.peek() == ' ')
-      {
-        state = OUTSIDE;
-      }
-      arg.push_back(c);
-      break;
+    for (string command : commands)
+    {
+      cout << trim(command) << ";";
+    }
 
-    case QUOTE:
-      // move to next & add unless end quote
-      if (ss.peek() == '"')
+    return;
+  }
+  else
+  {
+    std::stringstream ss(input);
+    State state = WORD;
+    string arg;
+    while (ss.peek() != EOF)
+    {
+      char c = ss.get();
+
+      switch (state)
       {
-        state = OUTSIDE;
-      }
-      if (c != '"')
-      {
+      case OUTSIDE:
+        // move to next, dont add to word
+        if (ss.peek() == '"')
+        {
+          state = QUOTE;
+          args.push_back(arg);
+          arg.clear();
+        }
+        else if (ss.peek() != ' ')
+        {
+          state = WORD;
+          args.push_back(arg);
+          arg.clear();
+        }
+        break;
+
+      case WORD:
+        // move to next & add unless a space
+        if (c == '\\')
+        {
+          c = ss.get();
+        }
+        if (ss.peek() == ' ')
+        {
+          state = OUTSIDE;
+        }
         arg.push_back(c);
+        break;
+
+      case QUOTE:
+        // move to next & add unless end quote
+        if (ss.peek() == '"')
+        {
+          state = OUTSIDE;
+        }
+        if (c != '"')
+        {
+          arg.push_back(c);
+        }
+        break;
       }
-      break;
+    }
+    if (arg.size() != 0)
+    {
+      args.push_back(arg);
+    }
+
+    // remove the command from the args list
+    if (!args.empty())
+    {
+      command_string = args.front();
+      args.erase(args.begin());
     }
   }
-  if (arg.size() != 0)
-  {
-    args.push_back(arg);
-  }
 
-  // remove the command from the args list
-  if (!args.empty())
-  {
-    command_string = args.front();
-    args.erase(args.begin());
-  }
+  // for (string arg : args)
+  // {
+  //   cout << arg << " ";
+  // }
 }
 
 void execute_command(string command)
@@ -281,11 +286,19 @@ void check_builtins()
   }
   else if (command_string == "echo")
   {
-    echo_command();
+    echo_command(args);
   }
   else if (command_string == "cd")
   {
-    cd_command();
+    cd_command(args, cur_dir);
+  }
+  else if (command_string == "jobs")
+  {
+    jobs_command(job_list);
+  }
+  else if (command_string == "kill")
+  {
+    kill_command(args, job_list);
   }
   else
   {
@@ -334,66 +347,12 @@ void run_external()
     if (background)
     {
       cout << pid << " " << command_string << endl;
-      // job_list[pid] = pair<int, string>(0, command_string); // add to jobs list
-      // return status;
+      job_list[pid] = pair<int, string>(0, command_string); // add to jobs list
     }
     else
     {
       wait(&status);
     }
-  }
-}
-
-void set_command()
-{
-  char **s = environ;
-
-  for (; *s; s++)
-  {
-    printf("%s\n", *s);
-  }
-}
-
-void echo_command()
-{
-  if (args.size() == 0)
-  {
-    return;
-  }
-  else if (args[0].substr(0, 1) == "$")
-  {
-    char string_char[args[0].length() + 1];
-
-    strcpy(string_char, args[0].substr(1).c_str());
-
-    if (getenv(string_char))
-    {
-      string env_value = getenv(string_char);
-      cout << env_value << "\n";
-    }
-    else
-    {
-      cout << "\n";
-    }
-  }
-  else
-  {
-    cout << args[0] << "\n";
-  }
-}
-
-void cd_command()
-{
-  int status = chdir(args.front().c_str());
-  if (status == -1)
-  {
-    perror("An error occurred");
-  }
-  else
-  {
-    getcwd(cur_dir, 256); // update the prompt cwd
-    setenv("PWD", cur_dir, 1);
-    // cout << cur_dir;
   }
 }
 
@@ -414,9 +373,6 @@ int main()
 
     string command = parse_command(text);
     split_args(command);
-
-    // cout << args[0];
-
     execute_command(command);
   }
 
