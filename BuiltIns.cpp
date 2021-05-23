@@ -87,7 +87,6 @@ void kill_command(vector<string> args, map<int, pair<int, string>> job_list)
 {
   int pid = atoi(args.front().c_str());
   int status = kill(pid, SIGKILL);
-  cout << pid;
 
   if (status < 0)
   {
