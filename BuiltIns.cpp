@@ -95,10 +95,6 @@ void kill_command(vector<string> args, map<int, pair<int, string>> job_list)
   }
   else
   {
-    // set the int value to 1
-
-    cout << "processo morto?";
-
     map<int, pair<int, string>>::iterator job = job_list.find(pid);
 
     if (job != job_list.end())
