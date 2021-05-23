@@ -12,19 +12,10 @@
 #include <sys/wait.h>
 #include "Utils.h"
 #include "BuiltIns.h"
-// #include <sys/stat.h>
-// #include <sys/types.h>
 
 using namespace std;
 
-enum State
-{
-  OUTSIDE,
-  WORD,
-  QUOTE
-};
-
-// headers
+// Headers
 void initialize();
 void handle_sigint();
 void handle_ctrd(char *entry);
@@ -32,18 +23,22 @@ void write_history(string command);
 void execute_command(string command);
 void check_builtins();
 void run_external();
-// string read_line(char *prompt);
 
-// global variables
-int status = 1;    // 1 - OK, 0 - EXIT OR ERROR
-char cur_dir[256]; // current directory
-int cmd_counter = 0;
+// Variáveis Globais
+enum State
+{
+  OUTSIDE,
+  WORD,
+  QUOTE
+};
+char cur_dir[256];
 string command_string = "";
 string prompt = "tecii$ ";
 struct utsname uname_data;
 vector<string> args;
 map<int, pair<int, string>> job_list;
 
+// Função chamada no inicio da execução, define variáveis de ambiente
 void initialize()
 {
   getcwd(cur_dir, 256);
@@ -53,6 +48,7 @@ void initialize()
   setenv("MYPS1", "tecii$", 1);
 }
 
+// Função chamada no momento que um ctrl+C é detectado
 void handle_sigint(int sig)
 {
   if (sig)
@@ -60,6 +56,7 @@ void handle_sigint(int sig)
   } // ignore ctrl+C
 }
 
+// Função que encapsula leitura de entrada, usada para lidar com ctrl+D
 void handle_ctrd(char *entry)
 {
   if (!entry)
@@ -69,11 +66,9 @@ void handle_ctrd(char *entry)
   }
 }
 
+// Função que cria arquivo history.txt e salva comandos executados
 void write_history(string command)
 {
-  //Function to write the current command into the history file.
-  //This function checks for 2000 entries, replaces the first entry if no of lines = 2000 else appends
-
   ifstream in("history.txt");
   vector<string> v;
   int n = 0;
@@ -84,7 +79,6 @@ void write_history(string command)
     while (!in.eof())
     {
       getline(in, s);
-      //cout<<"\nRead: "<<s;
 
       v.push_back(s);
       n++;
@@ -93,13 +87,10 @@ void write_history(string command)
     in.close();
   }
 
-  //printf("n is : %d",n);
   v.push_back(command);
 
-  if (n >= 50) //THRESHOLD VALUE
+  if (n >= 50) // Quantidade de comandos que serão salvos
   {
-    //n is equal to threshold
-    //cout<<"Printing";
     ofstream out("temp.txt", std::fstream::out | std::fstream::app);
 
     if (out.is_open())
@@ -112,7 +103,6 @@ void write_history(string command)
         out << "\n";
       }
 
-      //Push Final Element
       out << v[n];
 
       out.close();
@@ -127,7 +117,6 @@ void write_history(string command)
   }
   else
   {
-    //printf("\nAppending..");
     ofstream out("history.txt", std::fstream::out | std::fstream::app);
 
     if (out.is_open())
@@ -144,6 +133,7 @@ void write_history(string command)
   }
 }
 
+// Função para remover espaços que estejam no fim e no começo de cada comando e \n
 string parse_command(char text[])
 {
   regex space_remove_regex("^\\s+|\\s+$"); // remove leading and trailing spaces
@@ -158,19 +148,21 @@ string parse_command(char text[])
   return parsed;
 }
 
+// Função que divide os argumentos de cada comando em um vector<string>
 void split_args(string input)
 {
-  // clear args & command
   args.clear();
   command_string = "";
 
+  // Verificação se o comando possui pipes (não implementado)
   if (input.find('|') != string::npos)
   {
-    cout << "\ntem pipe\n";
+    cout << "\nTem pipes (não implementado)\n";
     string tmp;
     stringstream string_stream(input);
     vector<string> commands;
 
+    // Divide os comandos pelas pipes
     while (getline(string_stream, tmp, '|'))
     {
       commands.push_back(tmp);
@@ -178,7 +170,7 @@ void split_args(string input)
 
     for (string command : commands)
     {
-      cout << trim(command) << ";";
+      cout << "<" << trim(command) << ">";
     }
 
     return;
@@ -195,7 +187,6 @@ void split_args(string input)
       switch (state)
       {
       case OUTSIDE:
-        // move to next, dont add to word
         if (ss.peek() == '"')
         {
           state = QUOTE;
@@ -211,7 +202,6 @@ void split_args(string input)
         break;
 
       case WORD:
-        // move to next & add unless a space
         if (c == '\\')
         {
           c = ss.get();
@@ -224,7 +214,6 @@ void split_args(string input)
         break;
 
       case QUOTE:
-        // move to next & add unless end quote
         if (ss.peek() == '"')
         {
           state = OUTSIDE;
@@ -240,21 +229,15 @@ void split_args(string input)
     {
       args.push_back(arg);
     }
-
-    // remove the command from the args list
     if (!args.empty())
     {
       command_string = args.front();
       args.erase(args.begin());
     }
   }
-
-  // for (string arg : args)
-  // {
-  //   cout << arg << " ";
-  // }
 }
 
+//  Função chamada para executar o comando, também verifica se o comando não é só uma string vazia, se for só ignora
 void execute_command(string command)
 {
   if (command_string == "")
@@ -269,6 +252,7 @@ void execute_command(string command)
   }
 }
 
+// Função que verifica se o comando executado é um comando implementado pela própria shell
 void check_builtins()
 {
   if (command_string == "exit")
@@ -306,6 +290,7 @@ void check_builtins()
   }
 }
 
+// Util que transforma string em char*
 vector<char *> str_to_charptr(string cmd, vector<string> args)
 {
   vector<char *> argv;
@@ -314,10 +299,11 @@ vector<char *> str_to_charptr(string cmd, vector<string> args)
   {
     argv.push_back(&(*it)[0]);
   }
-  argv.push_back((char *)NULL); // needs to be null-terminated
+  argv.push_back((char *)NULL);
   return argv;
 }
 
+// Função para rodar programa externo à shell
 void run_external()
 {
   int pid = fork();
@@ -356,13 +342,14 @@ void run_external()
   }
 }
 
+// Função main
 int main()
 {
   signal(SIGINT, &handle_sigint);
 
   initialize();
 
-  while (status)
+  while (1)
   {
     prompt = getenv("MYPS1");
     cout << prompt << " ";
